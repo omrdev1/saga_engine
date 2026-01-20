@@ -1,0 +1,77 @@
+{
+  "name": "saga-engine",
+  "version": "1.0.0",
+  "description": "Crash-resilient, Postgres-backed Saga executor for Node.js. Best-effort compensation, 15-minute wall-clock limit, required idempotency.",
+  "main": "dist/index.js",
+  "bin": {
+    "saga-admin": "dist/bin/saga-admin.js"
+  },
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "postbuild": "chmod +x dist/bin/saga-admin.js",
+    "test": "jest",
+    "prepublishOnly": "npm run build",
+    "example:failure": "tsx examples/demo-failure.ts",
+    "example:resume": "tsx examples/demo-resume.ts",
+    "example:legacy-sync": "tsx examples/demo-legacy-sync.ts",
+    "example:observability": "tsx examples/demo-observability.ts",
+    "showcase": "tsx examples/showcase.ts",
+    "showcase:all": "tsx examples/showcase.ts --all",
+    "demo": "open docs/index.html || xdg-open docs/index.html || start docs/index.html"
+  },
+  "keywords": [
+    "saga",
+    "saga-pattern",
+    "workflow",
+    "orchestration",
+    "transaction",
+    "compensation",
+    "durable",
+    "crash-recovery",
+    "postgres",
+    "idempotency",
+    "distributed-systems",
+    "typescript"
+  ],
+  "author": "GrafikUi <hello@grafikui.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Grafikui/saga-engine.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Grafikui/saga-engine/issues"
+  },
+  "homepage": "https://github.com/Grafikui/saga-engine#readme",
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/pg": "^8.16.0",
+    "jest": "^30.2.0",
+    "ts-jest": "^29.4.6",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "pg": "^8.16.3"
+  },
+  "peerDependencies": {
+    "pg": ">=8.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
