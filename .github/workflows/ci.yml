@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    # Critical: Spin up a real Postgres instance for integration tests
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: saga
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: saga_test
+        ports:
+          - 5432:5432
+        # Health check ensures Postgres is ready before Node starts
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Use Node.js 20
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      # 'npm ci' is faster and safer than 'npm install' for CI
+      run: npm ci
+      
+    - name: Type Check & Build
+      run: npm run build
+      
+    - name: Run Tests
+      # Inject the connection string for the service container
+      env:
+        DATABASE_URL: postgres://saga:password@localhost:5432/saga_test
+      run: npm test
