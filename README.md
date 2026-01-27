@@ -85,6 +85,24 @@ await tx.run(async (t) => {
 2. `reserve-inventory` compensation runs (release)
 3. Original error is thrown
 
+> **Warning: External Idempotency Is Your Responsibility**
+>
+> Saga Engine persists step results *after* execution. If your process crashes after an external API call but before Saga Engine writes to Postgres, the step will re-execute on resumption.
+>
+> Your `execute` functions **must** pass idempotency keys to external providers:
+>
+> ```typescript
+> // WRONG: May charge twice on crash recovery
+> execute: () => stripe.charge(amount),
+>
+> // RIGHT: External provider deduplicates the call
+> execute: () => stripe.charge(amount, {
+>   idempotency_key: 'order-abc-charge'
+> }),
+> ```
+>
+> Saga Engine enforces that you *provide* idempotency keys. It cannot enforce that your external calls *use* them.
+
 ---
 
 ## Hard Guarantees
@@ -107,6 +125,23 @@ await tx.run(async (t) => {
 | Distributed transactions | Single-process, single-database only |
 | Long-running workflows | 15-minute hard limit. Use Temporal for hours/days. |
 | Auto-recovery from dead_letter | Terminal state. Manual CLI intervention required. |
+
+---
+
+## Infrastructure Notes
+
+### Postgres Lock Safety
+
+Saga Engine uses **session-level Postgres advisory locks** to prevent concurrent execution of the same workflow.
+
+| Connection Setup | Compatible |
+|-----------------|------------|
+| Direct `pg.Pool` connection | Yes |
+| PgBouncer in **session** mode | Yes |
+| PgBouncer in **transaction** mode | **No** — lock ownership is lost between queries |
+| Supabase Pooler (transaction mode) | **No** — use the direct connection string |
+
+If your Node process is killed (`SIGKILL`), Postgres automatically releases the advisory lock when the TCP connection drops. No zombie locks.
 
 ---
 
@@ -136,17 +171,34 @@ CREATE INDEX IF NOT EXISTS idx_transactions_error ON transactions USING GIN (err
 ## Workflow States
 
 ```
-pending → completed    (success)
-pending → failed       (failure + all compensations succeeded)
-pending → dead_letter  (failure + compensation failed, OR 15-min timeout)
+                     ┌───────────┐
+                     │  pending  │
+                     └─────┬─────┘
+                           │
+             ┌─────────────┼─────────────┐
+             │             │             │
+             ▼             ▼             ▼
+      ┌───────────┐ ┌───────────┐ ┌─────────────┐
+      │ completed │ │  failed   │ │ dead_letter │
+      └───────────┘ └───────────┘ └──────┬──────┘
+                                         │
+                                         │ saga-admin retry
+                                         ▼
+                                  ┌───────────┐
+                                  │  pending  │
+                                  └───────────┘
 ```
 
 | Status | Meaning | Action |
 |--------|---------|--------|
 | `pending` | In progress or resumable | Will continue on next run |
-| `completed` | All steps succeeded | Done |
-| `failed` | Failed but fully compensated | Safe to retry with new workflow |
-| `dead_letter` | Compensation failed or timed out | **Manual intervention required** |
+| `completed` | All steps succeeded | Terminal |
+| `failed` | Step failed, all compensations succeeded | Safe to retry with new workflow |
+| `dead_letter` | Compensation failed or 15-min timeout | **Manual intervention required** via `saga-admin retry` |
+
+**How `dead_letter` is reached:**
+- A `compensate()` function fails after exhausting its retry policy
+- The 15-minute wall-clock limit is exceeded (checked before each step and on resumption)
 
 ---
 

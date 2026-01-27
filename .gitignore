@@ -16,6 +16,9 @@ dist/
 *.swo
 .DS_Store
 
+# AI tools
+.claude/
+
 # Test coverage
 coverage/
 
